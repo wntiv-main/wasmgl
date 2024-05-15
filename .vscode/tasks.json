@@ -1,0 +1,10 @@
+{
+	"tasks": [
+		{
+			"label": "Build WASM",
+			"command": "wasm-pack",
+			"args": ["build", "--target", "web"],
+			"problemMatcher": []
+		}
+	]
+}
