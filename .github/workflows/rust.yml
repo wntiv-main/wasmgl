@@ -16,5 +16,7 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+    - name: Install Deps
+      run: cargo install wasm-pack
     - name: Build
       run: wasm-pack build --target web
