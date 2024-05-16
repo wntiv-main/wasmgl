@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, cell::RefCell, collections::HashMap, iter::{FromIterator, Map}, ops::Deref, rc::Rc};
+use std::{borrow::Borrow, cell::RefCell, collections::HashMap, intrinsics::size_of, iter::{FromIterator, Map}, mem::offset_of, ops::Deref, rc::Rc, sync::Arc};
 
 use wasm_bindgen::prelude::*;
 use web_sys::{Event, HtmlCanvasElement, WebGl2RenderingContext, WebGlProgram, WebGlShader, Window};
@@ -127,7 +127,7 @@ impl Renderer {
         Ok(Renderer{
             window,
             canvas,
-            vertices: [ //[-0.7, -0.7, 0.0, 0.7, -0.7, 0.0, 0.0, 0.7, 0.0]
+            vertices: [
                 Vertex{pos: Position{x: -0.7, y: -0.7, z: 0.0}},
                 Vertex{pos: Position{x: 0.7, y: -0.7, z: 0.0}},
                 Vertex{pos: Position{x: 0.0, y: 0.7, z: 0.0}},
@@ -141,6 +141,9 @@ impl Renderer {
     }
 
     pub fn init(&'static self) {
+        let buffer = self.context.create_buffer().expect_throw("Failed to create buffer");
+        context.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(&buffer));
+
         {
             let callback = Closure::<dyn FnMut(_)>::new(move |_event: Event| {
                 self.resize_canvas();
@@ -149,7 +152,46 @@ impl Renderer {
             self.window.add_event_listener_with_callback("resize", callback.as_ref().unchecked_ref()).expect_throw("add event listener failed");
             callback.forget();
         }
+
+        self.update();
+
+        
+        let vao = context
+            .create_vertex_array()
+            .ok_or("Could not create vertex array object")?;
+        context.bind_vertex_array(Some(&vao));
+
         self.render_loop();
+    }
+
+    fn vbo(&self, buf: &[f32], attribute_location: u32, offset: i32, dynamic: bool) {
+        // Note that `Float32Array::view` is somewhat dangerous (hence the
+        // `unsafe`!). This is creating a raw view into our module's
+        // `WebAssembly.Memory` buffer, but if we allocate more pages for ourself
+        // (aka do a memory allocation in Rust) it'll cause the buffer to change,
+        // causing the `Float32Array` to be invalid.
+        //
+        // As a result, after `Float32Array::view` we have to be very careful not to
+        // do any memory allocations before it's dropped.
+        unsafe {
+            let array_buf_view = js_sys::Float32Array::view(buf);
+
+            context.buffer_data_with_array_buffer_view(
+                WebGl2RenderingContext::ARRAY_BUFFER,
+                &array_buf_view,
+                if dynamic {WebGl2RenderingContext::STATIC_DRAW} else {WebGl2RenderingContext::DYNAMIC_DRAW},
+            );
+        }
+
+        context.vertex_attrib_pointer_with_i32(
+            attribute_location,
+            size_of<Position>() / size_of<f32>(),
+            WebGl2RenderingContext::FLOAT,
+            false,
+            size_of<Vertex>(),
+            offset,
+        );
+        context.enable_vertex_attrib_array(attribute_location);
     }
 
     fn resize_canvas(&self) {
@@ -157,6 +199,10 @@ impl Renderer {
             self.canvas.set_width(self.window.inner_width().unwrap().as_f64().unwrap_or_default().to_int_unchecked::<u32>());
             self.canvas.set_height(self.window.inner_height().unwrap().as_f64().unwrap_or_default().to_int_unchecked::<u32>());
         }
+    }
+
+    fn update(&self) {
+        self.vbo(self.vertices.as_slice(), self.attr_locations["position"], offset_of!(Vertex, position), false);
     }
 
     fn render(&self) {
@@ -185,57 +231,7 @@ fn start() -> Result<(), JsValue> {
     let canvas = document.get_element_by_id("canvas").unwrap();
     let canvas: web_sys::HtmlCanvasElement = canvas.dyn_into::<web_sys::HtmlCanvasElement>()?;
     let renderer = Renderer::new(&window, &canvas)?;
-
-    let vertices: [f32; 9] = [-0.7, -0.7, 0.0, 0.7, -0.7, 0.0, 0.0, 0.7, 0.0];
-
-    let position_attribute_location = context.get_attrib_location(&program, "position");
-    let buffer = context.create_buffer().ok_or("Failed to create buffer")?;
-    context.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(&buffer));
-
-    // Note that `Float32Array::view` is somewhat dangerous (hence the
-    // `unsafe`!). This is creating a raw view into our module's
-    // `WebAssembly.Memory` buffer, but if we allocate more pages for ourself
-    // (aka do a memory allocation in Rust) it'll cause the buffer to change,
-    // causing the `Float32Array` to be invalid.
-    //
-    // As a result, after `Float32Array::view` we have to be very careful not to
-    // do any memory allocations before it's dropped.
-    unsafe {
-        let positions_array_buf_view = js_sys::Float32Array::view(&vertices);
-
-        context.buffer_data_with_array_buffer_view(
-            WebGl2RenderingContext::ARRAY_BUFFER,
-            &positions_array_buf_view,
-            WebGl2RenderingContext::STATIC_DRAW,
-        );
-    }
-
-    let vao = context
-        .create_vertex_array()
-        .ok_or("Could not create vertex array object")?;
-    context.bind_vertex_array(Some(&vao));
-
-    context.vertex_attrib_pointer_with_i32(
-        position_attribute_location as u32,
-        3,
-        WebGl2RenderingContext::FLOAT,
-        false,
-        0,
-        0,
-    );
-    context.enable_vertex_attrib_array(position_attribute_location as u32);
-
-    context.bind_vertex_array(Some(&vao));
-
-    let vert_count = (vertices.len() / 3) as i32;
-    
+    renderer.init();
 
     Ok(())
-}
-
-fn draw(context: &WebGl2RenderingContext, vert_count: i32) {
-    context.clear_color(0.0, 0.0, 0.0, 1.0);
-    context.clear(WebGl2RenderingContext::COLOR_BUFFER_BIT);
-
-    context.draw_arrays(WebGl2RenderingContext::TRIANGLES, 0, vert_count);
 }
