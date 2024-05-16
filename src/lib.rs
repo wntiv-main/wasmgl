@@ -1,5 +1,6 @@
-use std::{borrow::Borrow, cell::RefCell, collections::HashMap, intrinsics::size_of, iter::{FromIterator, Map}, mem::offset_of, ops::Deref, rc::Rc, sync::Arc};
+use std::{cell::RefCell, collections::HashMap, iter::FromIterator, mem::{offset_of, size_of}, rc::Rc, sync::atomic::{AtomicPtr, Ordering}};
 
+use once_cell::sync::OnceCell;
 use wasm_bindgen::prelude::*;
 use web_sys::{Event, HtmlCanvasElement, WebGl2RenderingContext, WebGlProgram, WebGlShader, Window};
 
@@ -91,16 +92,16 @@ struct Vertex {
 }
 
 struct Renderer {
-    window: &'static Window,
-    canvas: &'static HtmlCanvasElement,
+    window: Window,
+    canvas: HtmlCanvasElement,
     context: WebGl2RenderingContext,
     main_shader: WebGlProgram,
     vertices: Vec<Vertex>,
-    attr_locations: HashMap<String, i32>,
+    attr_locations: HashMap<String, u32>,
 }
 
 impl Renderer {
-    pub fn new(window: &'static Window, canvas: &'static HtmlCanvasElement) -> Result<Renderer, JsValue> {
+    pub fn new(window: Window, canvas: HtmlCanvasElement) -> Result<Renderer, JsValue> {
         let context = canvas
                 .get_context("webgl2")?
                 .unwrap()
@@ -132,8 +133,8 @@ impl Renderer {
                 Vertex{pos: Position{x: 0.7, y: -0.7, z: 0.0}},
                 Vertex{pos: Position{x: 0.0, y: 0.7, z: 0.0}},
             ].to_vec(),
-            attr_locations: HashMap::from_iter(["position"].into_iter().map(|attr| {
-                (String::from(*attr), context.get_attrib_location(&shader_prog, attr))
+            attr_locations: HashMap::from_iter(["position"].iter().map(|attr| {
+                (String::from(*attr), context.get_attrib_location(&shader_prog, attr) as u32)
             })),
             context,
             main_shader: shader_prog,
@@ -142,7 +143,7 @@ impl Renderer {
 
     pub fn init(&'static self) {
         let buffer = self.context.create_buffer().expect_throw("Failed to create buffer");
-        context.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(&buffer));
+        self.context.bind_buffer(WebGl2RenderingContext::ARRAY_BUFFER, Some(&buffer));
 
         {
             let callback = Closure::<dyn FnMut(_)>::new(move |_event: Event| {
@@ -155,11 +156,10 @@ impl Renderer {
 
         self.update();
 
-        
-        let vao = context
+        let vao = self.context
             .create_vertex_array()
-            .ok_or("Could not create vertex array object")?;
-        context.bind_vertex_array(Some(&vao));
+            .expect_throw("Could not create vertex array object");
+        self.context.bind_vertex_array(Some(&vao));
 
         self.render_loop();
     }
@@ -176,22 +176,22 @@ impl Renderer {
         unsafe {
             let array_buf_view = js_sys::Float32Array::view(buf);
 
-            context.buffer_data_with_array_buffer_view(
+            self.context.buffer_data_with_array_buffer_view(
                 WebGl2RenderingContext::ARRAY_BUFFER,
                 &array_buf_view,
                 if dynamic {WebGl2RenderingContext::STATIC_DRAW} else {WebGl2RenderingContext::DYNAMIC_DRAW},
             );
         }
 
-        context.vertex_attrib_pointer_with_i32(
+        self.context.vertex_attrib_pointer_with_i32(
             attribute_location,
-            size_of<Position>() / size_of<f32>(),
+            (size_of::<Position>() / size_of::<f32>()) as i32,
             WebGl2RenderingContext::FLOAT,
             false,
-            size_of<Vertex>(),
+            size_of::<Vertex>() as i32,
             offset,
         );
-        context.enable_vertex_attrib_array(attribute_location);
+        self.context.enable_vertex_attrib_array(attribute_location);
     }
 
     fn resize_canvas(&self) {
@@ -202,14 +202,18 @@ impl Renderer {
     }
 
     fn update(&self) {
-        self.vbo(self.vertices.as_slice(), self.attr_locations["position"], offset_of!(Vertex, position), false);
+        self.vbo(
+            unsafe{self.vertices.as_slice().align_to::<f32>().1},
+            self.attr_locations["position"],
+            offset_of!(Vertex, pos) as i32,
+            false);
     }
 
     fn render(&self) {
         self.context.clear_color(0.0, 0.0, 0.0, 1.0);
         self.context.clear(WebGl2RenderingContext::COLOR_BUFFER_BIT);
 
-        self.context.draw_arrays(WebGl2RenderingContext::TRIANGLES, 0, vert_count);
+        self.context.draw_arrays(WebGl2RenderingContext::TRIANGLES, 0, self.vertices.len() as i32);
     }
 
     pub fn render_loop(&'static self) {
@@ -224,14 +228,19 @@ impl Renderer {
     }
 }
 
+static RENDERER: OnceCell<AtomicPtr<Renderer>> = OnceCell::new();
+
 #[wasm_bindgen(start)]
 fn start() -> Result<(), JsValue> {
     let window: Window = web_sys::window().unwrap();
     let document = window.document().unwrap();
     let canvas = document.get_element_by_id("canvas").unwrap();
     let canvas: web_sys::HtmlCanvasElement = canvas.dyn_into::<web_sys::HtmlCanvasElement>()?;
-    let renderer = Renderer::new(&window, &canvas)?;
-    renderer.init();
+    let mut renderer = Renderer::new(window, canvas).unwrap();
+    RENDERER.set(AtomicPtr::new(&mut renderer)).expect("ok");
+    unsafe {
+        RENDERER.get().unwrap().load(Ordering::Relaxed).as_ref().unwrap().init();
+    }
 
     Ok(())
 }
