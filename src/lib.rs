@@ -63,50 +63,49 @@ fn start() -> Result<(), JsValue> {
 
         uniform mat4 projection;
         in vec3 pos;
-        in vec3 color;
-        out vec3 vColor;
+        out vec4 normal;
 
         void main() {
-            vColor = color;
-            gl_Position = projection * vec4(pos + vec3((gl_InstanceID % 40) - 20, -1, -(gl_InstanceID / 40)), 1);
+            normal = gl_Normal;
+            gl_Position = projection * vec4(pos + vec3((gl_InstanceID % 100) - 50, -1, -(gl_InstanceID / 100)), 1);
         }
         "##,
         r##"#version 300 es
         
         precision highp float;
 
-        in vec3 vColor;
+        in vec4 normal;
         out vec4 outColor;
         
         void main() {
-            outColor = vec4(vColor, 1);
+            outColor = vec4(normal.xyz, 1);
         }
         "##,
         &["projection"],
-        &["pos", "color"],
+        &["pos"],
     );
     shader.enable(&context);
 
     let mut vao = VAO_new!(
         &context,
-        (vec![
-            Vertex { pos: Position { x: -0.4, y: -0.4, z: -0.4 }, color: Color { r: 0.0, g: 0.0, b: 0.0 }, },
-            Vertex { pos: Position { x: 0.4, y: -0.4, z: -0.4 }, color: Color { r: 1.0, g: 0.0, b: 0.0 }, },
-            Vertex { pos: Position { x: -0.4, y: 0.4, z: -0.4 }, color: Color { r: 0.0, g: 1.0, b: 0.0 }, },
-            Vertex { pos: Position { x: -0.4, y: -0.4, z: 0.4 }, color: Color { r: 0.0, g: 0.0, b: 1.0 }, },
-            Vertex { pos: Position { x: 0.4, y: 0.4, z: -0.4 }, color: Color { r: 1.0, g: 1.0, b: 0.0 }, },
-            Vertex { pos: Position { x: -0.4, y: 0.4, z: 0.4 }, color: Color { r: 0.0, g: 1.0, b: 1.0 }, },
-            Vertex { pos: Position { x: 0.4, y: -0.4, z: 0.4 }, color: Color { r: 1.0, g: 0.0, b: 1.0 }, },
-            Vertex { pos: Position { x: 0.4, y: 0.4, z: 0.4 }, color: Color { r: 1.0, g: 1.0, b: 1.0 }, },
-        ], WebGl2RenderingContext::ARRAY_BUFFER, WebGl2RenderingContext::DYNAMIC_DRAW),
-        (vec![
-            0u8, 1, 2, 1, 2, 4, // Back
-            3, 6, 5, 6, 5, 7, // Front
-            0, 2, 3, 2, 3, 5, // Left
-            1, 4, 6, 4, 6, 7, // Right
-            0, 1, 3, 1, 3, 6, // Top
-            2, 4, 5, 4, 5, 7, // Bottom
-        ], WebGl2RenderingContext::ELEMENT_ARRAY_BUFFER, WebGl2RenderingContext::STATIC_DRAW)
+        (Vec::<Position>::new()
+            // Vertex { pos: Position { x: -0.4, y: -0.4, z: -0.4 }, color: Color { r: 0.0, g: 0.0, b: 0.0 }, },
+            // Vertex { pos: Position { x: 0.4, y: -0.4, z: -0.4 }, color: Color { r: 1.0, g: 0.0, b: 0.0 }, },
+            // Vertex { pos: Position { x: -0.4, y: 0.4, z: -0.4 }, color: Color { r: 0.0, g: 1.0, b: 0.0 }, },
+            // Vertex { pos: Position { x: -0.4, y: -0.4, z: 0.4 }, color: Color { r: 0.0, g: 0.0, b: 1.0 }, },
+            // Vertex { pos: Position { x: 0.4, y: 0.4, z: -0.4 }, color: Color { r: 1.0, g: 1.0, b: 0.0 }, },
+            // Vertex { pos: Position { x: -0.4, y: 0.4, z: 0.4 }, color: Color { r: 0.0, g: 1.0, b: 1.0 }, },
+            // Vertex { pos: Position { x: 0.4, y: -0.4, z: 0.4 }, color: Color { r: 1.0, g: 0.0, b: 1.0 }, },
+            // Vertex { pos: Position { x: 0.4, y: 0.4, z: 0.4 }, color: Color { r: 1.0, g: 1.0, b: 1.0 }, },
+        , WebGl2RenderingContext::ARRAY_BUFFER, WebGl2RenderingContext::DYNAMIC_DRAW),
+        (Vec::<u8>::new()
+            // 0u8, 1, 2, 1, 2, 4, // Back
+            // 3, 6, 5, 6, 5, 7, // Front
+            // 0, 2, 3, 2, 3, 5, // Left
+            // 1, 4, 6, 4, 6, 7, // Right
+            // 0, 1, 3, 1, 3, 6, // Top
+            // 2, 4, 5, 4, 5, 7, // Bottom
+        , WebGl2RenderingContext::ELEMENT_ARRAY_BUFFER, WebGl2RenderingContext::STATIC_DRAW)
         // (vec![
         //     Position { x: 0.0, y: 0.0, z: 0.0 },
         //     Position { x: 1.0, y: 0.0, z: 0.0 },
@@ -116,8 +115,35 @@ fn start() -> Result<(), JsValue> {
         // ], WebGl2RenderingContext::ARRAY_BUFFER, WebGl2RenderingContext::STATIC_DRAW)
     );
 
-    VBO_bind!(vao.vbos.0, &context, shader, Vertex, pos, 3, WebGl2RenderingContext::FLOAT);
-    VBO_bind!(vao.vbos.0, &context, shader, Vertex, color, 3, WebGl2RenderingContext::FLOAT);
+    let segments = 7;
+    let height = 0.7;
+    let mut current_height = 0.;
+    let mut width = 0.03;
+
+    for i in 0..segments {
+        vao.vbos.0.buffer.push(Position { x: -width, y: current_height, z: 0.1 * i as f32 });
+        vao.vbos.0.buffer.push(Position { x: width, y: current_height, z: 0.1 * i as f32 });
+        let len = vao.vbos.0.len() as u8;
+        if i > 0 {
+            vao.vbos.1.buffer.append(&mut vec![
+                len - 4, len - 3, len - 2,
+                len - 3, len - 2, len - 1,
+            ]);
+        }
+        width -= width * i as f32 * 2. / segments as f32 / segments as f32;
+        current_height += (height - current_height) * 0.3;
+    }
+    vao.vbos.0.buffer.push(Position { x: 0.0, y: current_height, z: 0.1 * segments as f32 });
+    let len = vao.vbos.0.len() as u8;
+    vao.vbos.1.buffer.append(&mut vec![
+        len - 3, len - 2, len - 1,
+    ]);
+
+    vao.vbos.0.update(&context);
+    vao.vbos.1.update(&context);
+
+    VBO_bind!(vao.vbos.0, &context, shader.find_attr("pos"), Position, 3, WebGl2RenderingContext::FLOAT);
+    // VBO_bind!(vao.vbos.0, &context, shader, Vertex, color, 3, WebGl2RenderingContext::FLOAT);
 
     // VBO_bind!(vao.vbos.2, &context, shader.find_attr("offset"), Position, 3, WebGl2RenderingContext::FLOAT);
     // context.vertex_attrib_divisor(shader.find_attr("offset"), 1);
@@ -161,7 +187,7 @@ fn start() -> Result<(), JsValue> {
         );
     
         for ele in &mut vao.vbos.0.buffer {
-            ele.pos.rotate(&[0., 1., 0.], 1./30.);
+            ele.rotate(&[0., 1., 0.], 1./30.);
         }
         vao.vbos.0.update(&context);
 
@@ -172,7 +198,7 @@ fn start() -> Result<(), JsValue> {
             vao.vbos.1.len() as i32,
             WebGl2RenderingContext::UNSIGNED_BYTE,
             0,
-            5000
+            10000
         );
     })?;
 

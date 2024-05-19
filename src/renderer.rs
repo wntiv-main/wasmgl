@@ -208,7 +208,6 @@ impl<T> VBO<T> {
             buffer_type,
             access_type,
         };
-        result.update(ctx);
         result
     }
 
