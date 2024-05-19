@@ -63,10 +63,8 @@ fn start() -> Result<(), JsValue> {
 
         uniform mat4 projection;
         in vec3 pos;
-        out vec4 normal;
 
         void main() {
-            normal = gl_Normal;
             gl_Position = projection * vec4(pos + vec3((gl_InstanceID % 100) - 50, -1, -(gl_InstanceID / 100)), 1);
         }
         "##,
@@ -74,11 +72,10 @@ fn start() -> Result<(), JsValue> {
         
         precision highp float;
 
-        in vec4 normal;
         out vec4 outColor;
         
         void main() {
-            outColor = vec4(normal.xyz, 1);
+            outColor = vec4(0, 1, 0, 1);
         }
         "##,
         &["projection"],
