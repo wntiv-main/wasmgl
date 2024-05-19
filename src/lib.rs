@@ -65,7 +65,7 @@ fn start() -> Result<(), JsValue> {
         in vec3 pos;
 
         void main() {
-            gl_Position = projection * vec4(pos + vec3((gl_InstanceID % 100) - 50, -1, -(gl_InstanceID / 100)), 1);
+            gl_Position = projection * vec4(pos + vec3(((gl_InstanceID % 100) - 50) / 10., -1, -(gl_InstanceID / 100)/10.), 1);
         }
         "##,
         r##"#version 300 es
