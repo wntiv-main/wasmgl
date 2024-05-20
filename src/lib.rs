@@ -1,13 +1,21 @@
 #[macro_use]
 mod renderer;
+mod utils;
+mod Renderer;
+// mod Renderer;
 
+use std::collections::HashMap;
+use std::iter::FromIterator;
 use std::{borrow::Borrow, cmp::min, ops::Div};
 
-use renderer::{render_loop, Shader, perspective_matrix};
+use nalgebra::Matrix4;
 use wasm_bindgen::prelude::*;
 use web_sys::{
     WebGl2RenderingContext, Window,
 };
+
+use crate::utils::set_panic_hook;
+use crate::renderer::{render_loop, Shader, perspective_matrix};
 
 #[derive(Default, Clone, Copy)]
 struct Position {
@@ -47,6 +55,7 @@ struct Vertex {
 
 #[wasm_bindgen(start)]
 fn start() -> Result<(), JsValue> {
+    set_panic_hook();
     let window: Window = web_sys::window().unwrap();
     let document = window.document().unwrap();
     let canvas = document.get_element_by_id("canvas").unwrap();
@@ -57,30 +66,65 @@ fn start() -> Result<(), JsValue> {
         .unwrap()
         .dyn_into::<WebGl2RenderingContext>()?;
 
+    context.get_extension("WEBGL_depth_texture").expect_throw("need WEBGL_depth_texture");
+
+    let depth_tex = context.create_texture().expect_throw("texture failed to create");
+    let depth_tex_sz = 512;
+    context.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&depth_tex));
+    context.tex_image_2d_with_i32_and_i32_and_i32_and_format_and_type_and_opt_u8_array(
+        WebGl2RenderingContext::TEXTURE_2D,      // target
+        0,                  // mip level
+        WebGl2RenderingContext::DEPTH_COMPONENT as i32, // internal format
+        depth_tex_sz,   // width
+        depth_tex_sz,   // height
+        0,                  // border
+        WebGl2RenderingContext::DEPTH_COMPONENT, // format
+        WebGl2RenderingContext::UNSIGNED_INT,    // type
+        None).expect_throw("error binding");              // data
+    context.tex_parameteri(
+        WebGl2RenderingContext::TEXTURE_2D,
+        WebGl2RenderingContext::TEXTURE_MAG_FILTER,
+        WebGl2RenderingContext::NEAREST as i32);
+    context.tex_parameteri(
+        WebGl2RenderingContext::TEXTURE_2D,
+        WebGl2RenderingContext::TEXTURE_MIN_FILTER,
+        WebGl2RenderingContext::NEAREST as i32);
+    context.tex_parameteri(
+        WebGl2RenderingContext::TEXTURE_2D,
+        WebGl2RenderingContext::TEXTURE_WRAP_S,
+        WebGl2RenderingContext::CLAMP_TO_EDGE as i32);
+    context.tex_parameteri(
+        WebGl2RenderingContext::TEXTURE_2D,
+        WebGl2RenderingContext::TEXTURE_WRAP_T,
+        WebGl2RenderingContext::CLAMP_TO_EDGE as i32);
+    
+    let depth_framebuf = context.create_framebuffer().expect_throw("creating framebuf");
+    context.bind_framebuffer(WebGl2RenderingContext::FRAMEBUFFER, Some(&depth_framebuf));
+    context.framebuffer_texture_2d(
+        WebGl2RenderingContext::FRAMEBUFFER,       // target
+        WebGl2RenderingContext::DEPTH_ATTACHMENT,  // attachment point
+        WebGl2RenderingContext::TEXTURE_2D,        // texture target
+        Some(&depth_tex),         // texture
+        0);                   // mip level
+
+    let attribute_locations: HashMap<&str, u32> = HashMap::from([
+        ("pos", 0),
+    ]);
+    
+    let shadow_pass = Shader::new(&context,
+        include_str!("./shaders/shadow_pass.vsh"),
+        include_str!("./shaders/shadow_pass.fsh"),
+        &["projectionView"],
+        &["pos"],
+        Some(&attribute_locations));
+        
     let shader = Shader::new(
         &context,
-        r##"#version 300 es
-
-        uniform mat4 projection;
-        in vec3 pos;
-
-        void main() {
-            gl_Position = projection * vec4(pos + vec3(((gl_InstanceID % 100) - 50) / 10., -1, -(gl_InstanceID / 100)/10.), 1);
-        }
-        "##,
-        r##"#version 300 es
-        
-        precision highp float;
-
-        out vec4 outColor;
-        
-        void main() {
-            outColor = vec4(0, 1, 0, 1);
-        }
-        "##,
-        &["projection"],
+        include_str!("./shaders/main.vsh"),
+        include_str!("./shaders/main.fsh"),
+        &["projectionView", "shadowView"],
         &["pos"],
-    );
+        Some(&attribute_locations));
     shader.enable(&context);
 
     let mut vao = VAO_new!(
@@ -139,7 +183,7 @@ fn start() -> Result<(), JsValue> {
     vao.vbos.0.update(&context);
     vao.vbos.1.update(&context);
 
-    VBO_bind!(vao.vbos.0, &context, shader.find_attr("pos"), Position, 3, WebGl2RenderingContext::FLOAT);
+    VBO_bind!(vao.vbos.0, &context, attribute_locations["pos"], Position, 3, WebGl2RenderingContext::FLOAT);
     // VBO_bind!(vao.vbos.0, &context, shader, Vertex, color, 3, WebGl2RenderingContext::FLOAT);
 
     // VBO_bind!(vao.vbos.2, &context, shader.find_attr("offset"), Position, 3, WebGl2RenderingContext::FLOAT);
@@ -150,6 +194,10 @@ fn start() -> Result<(), JsValue> {
     // );   
 
     context.enable(WebGl2RenderingContext::DEPTH_TEST);
+
+    let mut proj_matrix = perspective_matrix(90.0_f32.to_radians(), 1., 0.1, 1000.);
+    let view_matrix = Matrix4::identity();
+    let shadow_view_matrix = Matrix4::identity();
 
     render_loop(move |resize: bool| {
         if resize {
@@ -173,20 +221,31 @@ fn start() -> Result<(), JsValue> {
             }
             let (w, h) = (canvas.width() as i32, canvas.height() as i32);
             context.viewport(0, 0, w, h);
-            context.uniform_matrix4fv_with_f32_array(
-                Some(shader.find_uniform("projection")), false,
-                &perspective_matrix(90.0_f32.to_radians(), w as f32 / h as f32, 0.1, 1000.));
+            proj_matrix = perspective_matrix(90.0_f32.to_radians(), w as f32 / h as f32, 0.1, 1000.);
         }
 
         context.clear_color(0., 0., 0., 1.);
         context.clear(
             WebGl2RenderingContext::COLOR_BUFFER_BIT | WebGl2RenderingContext::DEPTH_BUFFER_BIT,
         );
+
+        context.uniform_matrix4fv_with_f32_array(
+            Some(shader.find_uniform("projectionView")), false,
+            &(proj_matrix * view_matrix).data.as_slice());
+        
+        context.uniform_matrix4fv_with_f32_array(
+            Some(shader.find_uniform("shadowView")), false,
+            &(proj_matrix * shadow_view_matrix).data.as_slice());
+            
+        context.uniform_matrix4fv_with_f32_array(
+            Some(shadow_pass.find_uniform("projectionView")), false,
+            &(proj_matrix * shadow_view_matrix).data.as_slice());
+
     
-        for ele in &mut vao.vbos.0.buffer {
-            ele.rotate(&[0., 1., 0.], 1./30.);
-        }
-        vao.vbos.0.update(&context);
+        // for ele in &mut vao.vbos.0.buffer {
+        //     ele.rotate(&[0., 1., 0.], 1./30.);
+        // }
+        // vao.vbos.0.update(&context);
 
         vao.activate(&context);
 

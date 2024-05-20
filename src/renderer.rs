@@ -3,22 +3,23 @@ use std::{
 };
 
 use js_sys::{Array, Uint8Array};
+use nalgebra::{Matrix, Matrix4};
 use wasm_bindgen::{prelude::*, throw_str};
 use web_sys::{
     window, WebGl2RenderingContext, WebGlBuffer, WebGlProgram, WebGlShader, WebGlUniformLocation, WebGlVertexArrayObject
 };
 
-pub fn perspective_matrix(fov: f32, aspect_ratio: f32, near: f32, far: f32) -> [f32; 16] {
+pub fn perspective_matrix(fov: f32, aspect_ratio: f32, near: f32, far: f32) -> Matrix4<f32> {
     // https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/WebGL_model_view_projection
     let f = 1. / (fov / 2.).tan();
     let range = 1. / (near - far);
 
-    [
+    Matrix4::new(
         f / aspect_ratio, 0., 0., 0.,
         0., f, 0., 0.,
         0., 0., (near + far) * range, -1.,
         0., 0., near * far * range * 2., 0.,
-    ]
+    )
 }
 
 fn request_animation_frame(f: &Closure<dyn FnMut()>) {
@@ -56,6 +57,7 @@ fn link_program(
     context: &WebGl2RenderingContext,
     vert_shader: &WebGlShader,
     frag_shader: &WebGlShader,
+    bound_attribute_locations: Option<&HashMap<&str, u32>>,
 ) -> Result<WebGlProgram, String> {
     let program = context
         .create_program()
@@ -63,6 +65,11 @@ fn link_program(
 
     context.attach_shader(&program, vert_shader);
     context.attach_shader(&program, frag_shader);
+    if bound_attribute_locations.is_some() {
+        for (k, v) in bound_attribute_locations.unwrap() {
+            context.bind_attrib_location(&program, *v, *k);
+        }
+    }
     context.link_program(&program);
 
     if context
@@ -105,6 +112,7 @@ impl Shader {
         fragment_src: &str,
         uniforms: &[&str],
         attributes: &[&str],
+        bound_attribute_locations: Option<&HashMap<&str, u32>>,
     ) -> Shader {
         let vert_shader = compile_shader(
             context,
@@ -116,7 +124,7 @@ impl Shader {
             WebGl2RenderingContext::FRAGMENT_SHADER,
             fragment_src,
         ).or_throw();
-        let program = link_program(context, &vert_shader, &frag_shader)
+        let program = link_program(context, &vert_shader, &frag_shader, bound_attribute_locations)
             .or_throw();
         context.delete_shader(Some(&vert_shader));
         context.delete_shader(Some(&frag_shader));
@@ -130,7 +138,7 @@ impl Shader {
             uniform_locations: HashMap::from_iter(uniforms.iter().map(|attr| {
                 (
                     String::from(*attr),
-                    context.get_uniform_location(&program, attr).unwrap(),
+                    context.get_uniform_location(&program, attr).expect_throw("Uniform was not found"),
                 )
             })),
             program,
