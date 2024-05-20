@@ -1,14 +1,12 @@
 #[macro_use]
 mod renderer;
 mod utils;
-mod Renderer;
-// mod Renderer;
 
 use std::collections::HashMap;
 use std::iter::FromIterator;
 use std::{borrow::Borrow, cmp::min, ops::Div};
 
-use nalgebra::Matrix4;
+use nalgebra::{Matrix4, Vector3, Vector4};
 use wasm_bindgen::prelude::*;
 use web_sys::{
     WebGl2RenderingContext, Window,
@@ -197,7 +195,8 @@ fn start() -> Result<(), JsValue> {
 
     let mut proj_matrix = perspective_matrix(90.0_f32.to_radians(), 1., 0.1, 1000.);
     let view_matrix = Matrix4::identity();
-    let shadow_view_matrix = Matrix4::identity();
+    let shadow_view_matrix = Matrix4::face_towards(eye, target, up); // TODO
+    let (mut w, mut h) = (canvas.width() as i32, canvas.height() as i32);
 
     render_loop(move |resize: bool| {
         if resize {
@@ -219,35 +218,24 @@ fn start() -> Result<(), JsValue> {
                         .to_int_unchecked::<u32>(),
                 );
             }
-            let (w, h) = (canvas.width() as i32, canvas.height() as i32);
-            context.viewport(0, 0, w, h);
+            (w, h) = (canvas.width() as i32, canvas.height() as i32);
             proj_matrix = perspective_matrix(90.0_f32.to_radians(), w as f32 / h as f32, 0.1, 1000.);
         }
-
-        context.clear_color(0., 0., 0., 1.);
-        context.clear(
-            WebGl2RenderingContext::COLOR_BUFFER_BIT | WebGl2RenderingContext::DEPTH_BUFFER_BIT,
-        );
-
-        context.uniform_matrix4fv_with_f32_array(
-            Some(shader.find_uniform("projectionView")), false,
-            &(proj_matrix * view_matrix).data.as_slice());
         
-        context.uniform_matrix4fv_with_f32_array(
-            Some(shader.find_uniform("shadowView")), false,
-            &(proj_matrix * shadow_view_matrix).data.as_slice());
-            
+        vao.activate(&context);
+        
+        context.bind_framebuffer(WebGl2RenderingContext::FRAMEBUFFER, Some(&depth_framebuf));
+        context.viewport(0, 0, depth_tex_sz, depth_tex_sz);
+        context.clear(WebGl2RenderingContext::DEPTH_BUFFER_BIT);
+        shadow_pass.enable(&context);
         context.uniform_matrix4fv_with_f32_array(
             Some(shadow_pass.find_uniform("projectionView")), false,
             &(proj_matrix * shadow_view_matrix).data.as_slice());
-
-    
+            
         // for ele in &mut vao.vbos.0.buffer {
         //     ele.rotate(&[0., 1., 0.], 1./30.);
         // }
         // vao.vbos.0.update(&context);
-
-        vao.activate(&context);
 
         context.draw_elements_instanced_with_i32(
             WebGl2RenderingContext::TRIANGLES,
@@ -256,6 +244,27 @@ fn start() -> Result<(), JsValue> {
             0,
             10000
         );
+
+        context.bind_framebuffer(WebGl2RenderingContext::FRAMEBUFFER, None);
+        context.viewport(0, 0, w, h);
+        context.clear(
+            WebGl2RenderingContext::COLOR_BUFFER_BIT | WebGl2RenderingContext::DEPTH_BUFFER_BIT,
+        );
+
+        shader.enable(&context);
+        context.uniform_matrix4fv_with_f32_array(
+            Some(shader.find_uniform("projectionView")), false,
+            &(proj_matrix * view_matrix).data.as_slice());
+            
+        context.uniform_matrix4fv_with_f32_array(
+            Some(shader.find_uniform("shadowView")), false,
+            &(Matrix4::identity()
+                    .scale(0.5)
+                    .append_translation(Vector3::new(0.5, 0.5, 0.5))
+                * shadow_view_matrix)
+                .try_inverse()
+                .expect_throw("Matrix not inversable").data.as_slice());
+
     })?;
 
     Ok(())
