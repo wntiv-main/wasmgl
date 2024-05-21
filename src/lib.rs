@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::iter::FromIterator;
 use std::{borrow::Borrow, cmp::min, ops::Div};
 
-use nalgebra::{Matrix4, Vector3, Vector4};
+use nalgebra::{Matrix4, Point3, Vector3, Vector4};
 use wasm_bindgen::prelude::*;
 use web_sys::{
     WebGl2RenderingContext, Window,
@@ -66,18 +66,20 @@ fn start() -> Result<(), JsValue> {
 
     context.get_extension("WEBGL_depth_texture").expect_throw("need WEBGL_depth_texture");
 
+    context.clear_color(0., 0., 0., 1.);
+
     let depth_tex = context.create_texture().expect_throw("texture failed to create");
-    let depth_tex_sz = 512;
+    const depth_tex_sz: usize = 512;
     context.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&depth_tex));
-    context.tex_image_2d_with_i32_and_i32_and_i32_and_format_and_type_and_opt_u8_array(
+    context.tex_image_2d_with_i32_and_i32_and_i32_and_format_and_type_and_opt_array_buffer_view(
         WebGl2RenderingContext::TEXTURE_2D,      // target
         0,                  // mip level
-        WebGl2RenderingContext::DEPTH_COMPONENT as i32, // internal format
-        depth_tex_sz,   // width
-        depth_tex_sz,   // height
+        WebGl2RenderingContext::DEPTH_COMPONENT32F as i32, // internal format
+        depth_tex_sz as i32,   // width
+        depth_tex_sz as i32,   // height
         0,                  // border
         WebGl2RenderingContext::DEPTH_COMPONENT, // format
-        WebGl2RenderingContext::UNSIGNED_INT,    // type
+        WebGl2RenderingContext::FLOAT,    // type
         None).expect_throw("error binding");              // data
     context.tex_parameteri(
         WebGl2RenderingContext::TEXTURE_2D,
@@ -195,7 +197,11 @@ fn start() -> Result<(), JsValue> {
 
     let mut proj_matrix = perspective_matrix(90.0_f32.to_radians(), 1., 0.1, 1000.);
     let view_matrix = Matrix4::identity();
-    let shadow_view_matrix = Matrix4::face_towards(eye, target, up); // TODO
+    let shadow_view_matrix = Matrix4::face_towards(
+        &Point3::new(5., -5., 5.),
+        &Point3::new(0., 0., 5.),
+        &Vector3::new(0., 1., 0.),
+    ); // TODO
     let (mut w, mut h) = (canvas.width() as i32, canvas.height() as i32);
 
     render_loop(move |resize: bool| {
@@ -225,7 +231,7 @@ fn start() -> Result<(), JsValue> {
         vao.activate(&context);
         
         context.bind_framebuffer(WebGl2RenderingContext::FRAMEBUFFER, Some(&depth_framebuf));
-        context.viewport(0, 0, depth_tex_sz, depth_tex_sz);
+        context.viewport(0, 0, depth_tex_sz as i32, depth_tex_sz as i32);
         context.clear(WebGl2RenderingContext::DEPTH_BUFFER_BIT);
         shadow_pass.enable(&context);
         context.uniform_matrix4fv_with_f32_array(
@@ -260,11 +266,18 @@ fn start() -> Result<(), JsValue> {
             Some(shader.find_uniform("shadowView")), false,
             &(Matrix4::identity()
                     .scale(0.5)
-                    .append_translation(Vector3::new(0.5, 0.5, 0.5))
+                    .append_translation(&Vector3::new(0.5, 0.5, 0.5))
                 * shadow_view_matrix)
                 .try_inverse()
                 .expect_throw("Matrix not inversable").data.as_slice());
 
+        context.draw_elements_instanced_with_i32(
+            WebGl2RenderingContext::TRIANGLES,
+            vao.vbos.1.len() as i32,
+            WebGl2RenderingContext::UNSIGNED_BYTE,
+            0,
+            10000
+        );
     })?;
 
     Ok(())
