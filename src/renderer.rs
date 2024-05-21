@@ -9,19 +9,6 @@ use web_sys::{
     window, WebGl2RenderingContext, WebGlBuffer, WebGlProgram, WebGlShader, WebGlUniformLocation, WebGlVertexArrayObject
 };
 
-pub fn perspective_matrix(fov: f32, aspect_ratio: f32, near: f32, far: f32) -> Matrix4<f32> {
-    // https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/WebGL_model_view_projection
-    let f = 1. / (fov / 2.).tan();
-    let range = 1. / (near - far);
-
-    Matrix4::new(
-        f / aspect_ratio, 0., 0., 0.,
-        0., f, 0., 0.,
-        0., 0., (near + far) * range, -1.,
-        0., 0., near * far * range * 2., 0.,
-    )
-}
-
 fn request_animation_frame(f: &Closure<dyn FnMut()>) {
     web_sys::window()
         .unwrap()
