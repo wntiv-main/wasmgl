@@ -68,55 +68,55 @@ fn start() -> Result<(), JsValue> {
 
     context.clear_color(0., 0., 0., 1.);
 
-    let depth_tex = context.create_texture().expect_throw("texture failed to create");
-    const depth_tex_sz: usize = 512;
-    context.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&depth_tex));
-    context.tex_image_2d_with_i32_and_i32_and_i32_and_format_and_type_and_opt_array_buffer_view(
-        WebGl2RenderingContext::TEXTURE_2D,      // target
-        0,                  // mip level
-        WebGl2RenderingContext::DEPTH_COMPONENT32F as i32, // internal format
-        depth_tex_sz as i32,   // width
-        depth_tex_sz as i32,   // height
-        0,                  // border
-        WebGl2RenderingContext::DEPTH_COMPONENT, // format
-        WebGl2RenderingContext::FLOAT,    // type
-        None).expect_throw("error binding");              // data
-    context.tex_parameteri(
-        WebGl2RenderingContext::TEXTURE_2D,
-        WebGl2RenderingContext::TEXTURE_MAG_FILTER,
-        WebGl2RenderingContext::NEAREST as i32);
-    context.tex_parameteri(
-        WebGl2RenderingContext::TEXTURE_2D,
-        WebGl2RenderingContext::TEXTURE_MIN_FILTER,
-        WebGl2RenderingContext::NEAREST as i32);
-    context.tex_parameteri(
-        WebGl2RenderingContext::TEXTURE_2D,
-        WebGl2RenderingContext::TEXTURE_WRAP_S,
-        WebGl2RenderingContext::CLAMP_TO_EDGE as i32);
-    context.tex_parameteri(
-        WebGl2RenderingContext::TEXTURE_2D,
-        WebGl2RenderingContext::TEXTURE_WRAP_T,
-        WebGl2RenderingContext::CLAMP_TO_EDGE as i32);
+    // let depth_tex = context.create_texture().expect_throw("texture failed to create");
+    // const depth_tex_sz: usize = 512;
+    // context.bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&depth_tex));
+    // context.tex_image_2d_with_i32_and_i32_and_i32_and_format_and_type_and_opt_array_buffer_view(
+    //     WebGl2RenderingContext::TEXTURE_2D,      // target
+    //     0,                  // mip level
+    //     WebGl2RenderingContext::DEPTH_COMPONENT32F as i32, // internal format
+    //     depth_tex_sz as i32,   // width
+    //     depth_tex_sz as i32,   // height
+    //     0,                  // border
+    //     WebGl2RenderingContext::DEPTH_COMPONENT, // format
+    //     WebGl2RenderingContext::FLOAT,    // type
+    //     None).expect_throw("error binding");              // data
+    // context.tex_parameteri(
+    //     WebGl2RenderingContext::TEXTURE_2D,
+    //     WebGl2RenderingContext::TEXTURE_MAG_FILTER,
+    //     WebGl2RenderingContext::NEAREST as i32);
+    // context.tex_parameteri(
+    //     WebGl2RenderingContext::TEXTURE_2D,
+    //     WebGl2RenderingContext::TEXTURE_MIN_FILTER,
+    //     WebGl2RenderingContext::NEAREST as i32);
+    // context.tex_parameteri(
+    //     WebGl2RenderingContext::TEXTURE_2D,
+    //     WebGl2RenderingContext::TEXTURE_WRAP_S,
+    //     WebGl2RenderingContext::CLAMP_TO_EDGE as i32);
+    // context.tex_parameteri(
+    //     WebGl2RenderingContext::TEXTURE_2D,
+    //     WebGl2RenderingContext::TEXTURE_WRAP_T,
+    //     WebGl2RenderingContext::CLAMP_TO_EDGE as i32);
     
-    let depth_framebuf = context.create_framebuffer().expect_throw("creating framebuf");
-    context.bind_framebuffer(WebGl2RenderingContext::FRAMEBUFFER, Some(&depth_framebuf));
-    context.framebuffer_texture_2d(
-        WebGl2RenderingContext::FRAMEBUFFER,       // target
-        WebGl2RenderingContext::DEPTH_ATTACHMENT,  // attachment point
-        WebGl2RenderingContext::TEXTURE_2D,        // texture target
-        Some(&depth_tex),         // texture
-        0);                   // mip level
+    // let depth_framebuf = context.create_framebuffer().expect_throw("creating framebuf");
+    // context.bind_framebuffer(WebGl2RenderingContext::FRAMEBUFFER, Some(&depth_framebuf));
+    // context.framebuffer_texture_2d(
+    //     WebGl2RenderingContext::FRAMEBUFFER,       // target
+    //     WebGl2RenderingContext::DEPTH_ATTACHMENT,  // attachment point
+    //     WebGl2RenderingContext::TEXTURE_2D,        // texture target
+    //     Some(&depth_tex),         // texture
+    //     0);                   // mip level
 
     let attribute_locations: HashMap<&str, u32> = HashMap::from([
         ("pos", 0),
     ]);
     
-    let shadow_pass = Shader::new(&context,
-        include_str!("./shaders/shadow_pass.vsh"),
-        include_str!("./shaders/shadow_pass.fsh"),
-        &["projectionView"],
-        &["pos"],
-        Some(&attribute_locations));
+    // let shadow_pass = Shader::new(&context,
+    //     include_str!("./shaders/shadow_pass.vsh"),
+    //     include_str!("./shaders/shadow_pass.fsh"),
+    //     &["projectionView"],
+    //     &["pos"],
+    //     Some(&attribute_locations));
         
     let shader = Shader::new(
         &context,
@@ -251,7 +251,7 @@ fn start() -> Result<(), JsValue> {
         //     10000
         // );
 
-        context.bind_framebuffer(WebGl2RenderingContext::FRAMEBUFFER, None);
+        // context.bind_framebuffer(WebGl2RenderingContext::FRAMEBUFFER, None);
         context.viewport(0, 0, w, h);
         context.clear(
             WebGl2RenderingContext::COLOR_BUFFER_BIT | WebGl2RenderingContext::DEPTH_BUFFER_BIT,
