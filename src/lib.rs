@@ -238,10 +238,10 @@ fn start() -> Result<(), JsValue> {
         //     Some(shadow_pass.find_uniform("projectionView")), false,
         //     &(proj_matrix * shadow_view_matrix).data.as_slice());
             
-        // // for ele in &mut vao.vbos.0.buffer {
-        // //     ele.rotate(&[0., 1., 0.], 1./30.);
-        // // }
-        // // vao.vbos.0.update(&context);
+        for ele in &mut vao.vbos.0.buffer {
+            ele.rotate(&[0., 1., 0.], 1./30.);
+        }
+        vao.vbos.0.update(&context);
 
         // context.draw_elements_instanced_with_i32(
         //     WebGl2RenderingContext::TRIANGLES,
