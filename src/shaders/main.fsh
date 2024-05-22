@@ -3,13 +3,20 @@
 precision highp float;
 
 uniform sampler2D shadowMap;
+uniform vec4 reverseLightDir;
 in vec3 v_normal;
 in vec4 shadowPos;
 out vec4 outColor;
+in vec3 surfaceToView;
+in vec3 surfaceToLight;
 const vec3 grassColor = vec3(0, 1, 0);
 
 void main() {
 	// outColor = vec4(0, 1, depth, 1);
+	
+	vec3 normal = normalize(v_normal);
+
+	float light = dot(normal, reverseLightDir);
 
 	vec3 normShadowPos = shadowPos.xyz / shadowPos.w;
 	bool inRange = normShadowPos.x >= 0.0f &&

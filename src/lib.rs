@@ -140,7 +140,7 @@ fn start() -> Result<(), JsValue> {
         &context,
         include_str!("./shaders/main.vsh"),
         include_str!("./shaders/main.fsh"),
-        &["projection", "view", "shadowView"],
+        &["projection", "view", "reverseLightDir", "lightPos", "shadowView"],
         &["pos", "normal"],
         Some(&attribute_locations));
     shader.enable(&context);
@@ -316,6 +316,10 @@ fn start() -> Result<(), JsValue> {
         context.uniform3fv_with_f32_array(
             Some(shader.find_uniform("lightPos")),
             (light_pos).data.as_slice());
+            
+        context.uniform3fv_with_f32_array(
+            Some(shader.find_uniform("reverseLightDir")),
+            &(shadow_view_matrix).data.as_slice()[8..11]);
             
         context.uniform_matrix4fv_with_f32_array(
             Some(shader.find_uniform("shadowView")), false,
