@@ -11,16 +11,13 @@ in vec3 surfaceToView;
 in vec3 surfaceToLight;
 const vec3 grassColor = vec3(0, 1, 0);
 
-float dot(vec3 a, vec3 b) {
-	return a.x * b.x + a.y * b.y + a.z * b.z;
-}
 
 void main() {
 	// outColor = vec4(0, 1, depth, 1);
 	
 	vec3 normal = normalize(v_normal);
 
-	float light = dot(normal, reverseLightDir);
+	float light = dot(normal, reverseLightDir.xyz);
 
 	vec3 normShadowPos = shadowPos.xyz / shadowPos.w;
 	bool inRange = normShadowPos.x >= 0.0f &&
