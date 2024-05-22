@@ -16,7 +16,7 @@ void main() {
 	v_normal = mat3(view) * normal;
 
 	// compute the world position of the surface
-	vec3 surfaceWorldPosition = (view * pos).xyz;
+	vec3 surfaceWorldPosition = (view * vec4(pos, 1)).xyz;
 
 	// compute the vector of the surface to the light
 	// and pass it to the fragment shader
