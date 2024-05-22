@@ -1,7 +1,9 @@
 #version 300 es
 
-uniform mat4 projectionView;
+uniform mat4 projection;
+uniform mat4 view;
 uniform mat4 shadowView;
+uniform vec3 lightPos;
 in vec3 pos;
 out vec4 shadowPos;
 in vec3 normal;
@@ -18,12 +20,12 @@ void main() {
 
 	// compute the vector of the surface to the light
 	// and pass it to the fragment shader
-	v_surfaceToLight = -shadowView[3].xyz - surfaceWorldPosition;
+	v_surfaceToLight = lightPos - surfaceWorldPosition;
 
 	// compute the vector of the surface to the view/camera
 	// and pass it to the fragment shader
-	v_surfaceToView = -projectionView[3].xyz - surfaceWorldPosition;
+	v_surfaceToView = -view[3].xyz - surfaceWorldPosition;
 
 	shadowPos = (shadowView * modelPos);
-	gl_Position = projectionView * modelPos;
+	gl_Position = projection * view * modelPos;
 }

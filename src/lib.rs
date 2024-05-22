@@ -140,7 +140,7 @@ fn start() -> Result<(), JsValue> {
         &context,
         include_str!("./shaders/main.vsh"),
         include_str!("./shaders/main.fsh"),
-        &["projectionView", "shadowView"],
+        &["projection", "view", "shadowView"],
         &["pos", "normal"],
         Some(&attribute_locations));
     shader.enable(&context);
@@ -236,12 +236,13 @@ fn start() -> Result<(), JsValue> {
         1.,
         120.0f32.to_radians(),
         0.1, 100.);
+    let light_pos = Vector3::new(1., 3., -1.);
     let view_matrix = 
         Matrix4::from_euler_angles(0., 0., 0.)
             .prepend_translation(&-Vector3::new(0., 1., 0.));
     let shadow_view_matrix = 
         Matrix4::from_euler_angles(60.0f32.to_radians(), -10.0f32.to_radians(), 0.)
-            .prepend_translation(&-Vector3::new(1., 3., -1.));
+            .prepend_translation(&-light_pos);
     let (mut w, mut h) = (canvas.width() as i32, canvas.height() as i32);
 
     render_loop(move |resize: bool| {
@@ -305,8 +306,16 @@ fn start() -> Result<(), JsValue> {
         shader.enable(&context);
 
         context.uniform_matrix4fv_with_f32_array(
-            Some(shader.find_uniform("projectionView")), false,
-            (proj_matrix * view_matrix).data.as_slice());
+            Some(shader.find_uniform("projection")), false,
+            (proj_matrix).data.as_slice());
+
+        context.uniform_matrix4fv_with_f32_array(
+            Some(shader.find_uniform("view")), false,
+            (view_matrix).data.as_slice());
+
+        context.uniform3fv_with_f32_array(
+            Some(shader.find_uniform("lightPos")),
+            (light_pos).data.as_slice());
             
         context.uniform_matrix4fv_with_f32_array(
             Some(shader.find_uniform("shadowView")), false,
