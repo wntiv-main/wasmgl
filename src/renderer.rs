@@ -125,7 +125,7 @@ impl Shader {
             uniform_locations: HashMap::from_iter(uniforms.iter().map(|attr| {
                 (
                     String::from(*attr),
-                    context.get_uniform_location(&program, attr).expect_throw("Uniform was not found"),
+                    context.get_uniform_location(&program, attr).expect_throw(format!("Uniform {attr} was not found").as_str()),
                 )
             })),
             program,
