@@ -21,7 +21,7 @@ wasm-bindgen = "0.2.84"
 # code size when deploying.
 console_error_panic_hook = { version = "0.1.7", optional = true }
 once_cell = "1.19.0"
-nalgebra = "0.32.5"
+nalgebra = "0.33.0"
 
 [dependencies.web-sys]
 version = "0.3.4"
